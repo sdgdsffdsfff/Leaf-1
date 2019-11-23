@@ -156,6 +156,7 @@ public class SegmentIDGenImpl implements IDGen {
         } else if (buffer.getUpdateTimestamp() == 0) {
             leafAlloc = dao.updateMaxIdAndGetLeafAlloc(key);
             buffer.setUpdateTimestamp(System.currentTimeMillis());
+            buffer.setStep(leafAlloc.getStep());
             buffer.setMinStep(leafAlloc.getStep());//leafAlloc中的step为DB中的step
         } else {
             long duration = System.currentTimeMillis() - buffer.getUpdateTimestamp();
@@ -190,8 +191,8 @@ public class SegmentIDGenImpl implements IDGen {
 
     public Result getIdFromSegmentBuffer(final SegmentBuffer buffer) {
         while (true) {
+            buffer.rLock().lock();
             try {
-                buffer.rLock().lock();
                 final Segment segment = buffer.getCurrent();
                 if (!buffer.isNextReady() && (segment.getIdle() < 0.9 * segment.getStep()) && buffer.getThreadRunning().compareAndSet(false, true)) {
                     service.execute(new Runnable() {
@@ -226,8 +227,8 @@ public class SegmentIDGenImpl implements IDGen {
                 buffer.rLock().unlock();
             }
             waitAndSleep(buffer);
+            buffer.wLock().lock();
             try {
-                buffer.wLock().lock();
                 final Segment segment = buffer.getCurrent();
                 long value = segment.getValue().getAndIncrement();
                 if (value < segment.getMax()) {
